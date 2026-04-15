@@ -1,0 +1,172 @@
+{% set html_title="Perspective projection demo - Computer Graphics from Scratch" %}
+
+# Perspective projection demo
+
+This is an implementation of the [perspective projection equations](../09-perspective-projection.html#projecting-our-first-3d-object).
+We use them to project the vertices of a cube, and then draw line segments between these, to render
+a wireframe cube.
+
+We use the same color for the edges of each face of the cube. Because each edge is shared by two faces,
+the color you see depends on the order in which we draw them.
+
+<div class="centered">
+  <canvas id="canvas" width=600 height=600 style="border: 1px grey solid"></canvas>
+</div>
+
+<script>
+"use strict";
+
+// ======================================================================
+//  Low-level canvas access.
+// ======================================================================
+
+let canvas = document.getElementById("canvas");
+let canvas_context = canvas.getContext("2d");
+let canvas_buffer = canvas_context.getImageData(0, 0, canvas.width, canvas.height);
+
+// A color.
+function Color(r, g, b) {
+  return {
+    r, g, b,
+    mul: function(n) { return new Color(this.r*n, this.g*n, this.b*n); },
+  };
+}
+
+// The PutPixel() function.
+function PutPixel(x, y, color) {
+  x = canvas.width/2 + (x | 0);
+  y = canvas.height/2 - (y | 0) - 1;
+
+  if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+    return;
+  }
+
+  let offset = 4*(x + canvas_buffer.width*y);
+  canvas_buffer.data[offset++] = color.r;
+  canvas_buffer.data[offset++] = color.g;
+  canvas_buffer.data[offset++] = color.b;
+  canvas_buffer.data[offset++] = 255; // Alpha = 255 (full opacity)
+}
+
+
+// Displays the contents of the offscreen buffer into the canvas.
+function UpdateCanvas() {
+  canvas_context.putImageData(canvas_buffer, 0, 0);
+}
+
+
+// ======================================================================
+//  Data model.
+// ======================================================================
+
+// A Point.
+function Pt(x, y, h) {
+  return {x, y, h};
+}
+
+
+// A 3D vertex.
+function Vertex(x, y, z) {
+  return {x, y, z};
+}
+
+
+
+// ======================================================================
+//  Rasterization code.
+// ======================================================================
+
+// Scene setup.
+let viewport_size = 1;
+let projection_plane_z = 1;
+
+
+function Interpolate(i0, d0, i1, d1) {
+  if (i0 == i1) {
+    return [d0];
+  }
+
+  let values = [];
+  let a = (d1 - d0) / (i1 - i0);
+  let d = d0;
+  for (let i = i0; i <= i1; i++) {
+    values.push(d);
+    d += a;
+  }
+
+  return values;
+}
+
+
+function DrawLine(p0, p1, color) {
+  let dx = p1.x - p0.x, dy = p1.y - p0.y;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    // The line is horizontal-ish. Make sure it's left to right.
+    if (dx < 0) { let swap = p0; p0 = p1; p1 = swap; }
+
+    // Compute the Y values and draw.
+    let ys = Interpolate(p0.x, p0.y, p1.x, p1.y);
+    for (let x = p0.x; x <= p1.x; x++) {
+      PutPixel(x, ys[(x - p0.x) | 0], color);
+    }
+  } else {
+    // The line is verical-ish. Make sure it's bottom to top.
+    if (dy < 0) { let swap = p0; p0 = p1; p1 = swap; }
+
+    // Compute the X values and draw.
+    let xs = Interpolate(p0.y, p0.x, p1.y, p1.x);
+    for (let y = p0.y; y <= p1.y; y++) {
+      PutPixel(xs[(y - p0.y) | 0], y, color);
+    }
+  }
+}
+
+
+// Converts 2D viewport coordinates to 2D canvas coordinates.
+function ViewportToCanvas(p2d) {
+  return new Pt(
+    p2d.x * canvas.width / viewport_size,
+    p2d.y * canvas.height / viewport_size);
+}
+
+
+function ProjectVertex(v) {
+  return ViewportToCanvas(new Pt(
+    v.x * projection_plane_z / v.z,
+    v.y * projection_plane_z / v.z));
+}
+
+
+const vA = new Vertex(-2, -0.5, 5);
+const vB = new Vertex(-2, 0.5, 5);
+const vC = new Vertex(-1, 0.5, 5);
+const vD = new Vertex(-1, -0.5, 5);
+
+const vAb = new Vertex(-2, -0.5, 6);
+const vBb = new Vertex(-2, 0.5, 6);
+const vCb = new Vertex(-1, 0.5, 6);
+const vDb = new Vertex(-1, -0.5, 6);
+
+const RED = new Color(255, 0, 0);
+const GREEN = new Color(0, 255, 0);
+const BLUE = new Color(0, 0, 255);
+
+DrawLine(ProjectVertex(vA), ProjectVertex(vB), BLUE);
+DrawLine(ProjectVertex(vB), ProjectVertex(vC), BLUE);
+DrawLine(ProjectVertex(vC), ProjectVertex(vD), BLUE);
+DrawLine(ProjectVertex(vD), ProjectVertex(vA), BLUE);
+
+DrawLine(ProjectVertex(vAb), ProjectVertex(vBb), RED);
+DrawLine(ProjectVertex(vBb), ProjectVertex(vCb), RED);
+DrawLine(ProjectVertex(vCb), ProjectVertex(vDb), RED);
+DrawLine(ProjectVertex(vDb), ProjectVertex(vAb), RED);
+
+DrawLine(ProjectVertex(vA), ProjectVertex(vAb), GREEN);
+DrawLine(ProjectVertex(vB), ProjectVertex(vBb), GREEN);
+DrawLine(ProjectVertex(vC), ProjectVertex(vCb), GREEN);
+DrawLine(ProjectVertex(vD), ProjectVertex(vDb), GREEN);
+
+UpdateCanvas();
+
+</script>
